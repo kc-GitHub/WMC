@@ -19,8 +19,8 @@
    E X P O R T E D   S Y M B O L   D E F I N I T I O N S (defines, typedefs)
  **********************************************************************************************************************/
 #define WMC_PULSE_SWITCH_UPDATE_TIME 50
-#define encoder0PinA D5
-#define encoder0PinB D6
+#define encoder0PinA 4 // D2 on WEMOS D1 Mini
+#define encoder0PinB 5 // D1 on WEMOS D1 Mini
 
 /***********************************************************************************************************************
    D A T A   D E C L A R A T I O N S (exported, local)
