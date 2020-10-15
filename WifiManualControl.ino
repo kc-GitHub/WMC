@@ -7,7 +7,7 @@
 /***********************************************************************************************************************
    I N C L U D E S
  **********************************************************************************************************************/
-#include "Bounce2.h"
+#include <KeyPadMatrix.h>
 #include "Loclib.h"
 #include "WmcTft.h"
 #include "Z21Slave.h"
@@ -18,18 +18,45 @@
 /***********************************************************************************************************************
    E X P O R T E D   S Y M B O L   D E F I N I T I O N S (defines, typedefs)
  **********************************************************************************************************************/
-#define WMC_PULSE_SWITCH_UPDATE_TIME 50
-#define encoder0PinA 4 // D2 on WEMOS D1 Mini
-#define encoder0PinB 5 // D1 on WEMOS D1 Mini
+#define PIN_ENCODER_A           4 // D2 on WEMOS D1 Mini
+#define PIN_ENCODER_B           5 // D1 on WEMOS D1 Mini
 
-#define ENABLE_SERIAL_DEBUG		1	// Set to 1 to enable serial debug
+#define ENABLE_SERIAL_DEBUG     0 // Set to 1 to enable serial debug
 
 /***********************************************************************************************************************
    D A T A   D E C L A R A T I O N S (exported, local)
  **********************************************************************************************************************/
 
-Bounce WmcPowerOffOnButton      = Bounce();
-Bounce WmcPulseSwitchPushButton = Bounce();
+#define PIN_KEYBOARD_C0         2 // D4 on WEMOS D1 Mini
+#define PIN_KEYBOARD_C1         0 // D3 on WEMOS D1 Mini
+#define PIN_KEYBOARD_C2         3 // RX on WEMOS D1 Mini
+#define PIN_KEYBOARD_C3         1 // TX on WEMOS D1 Mini
+#define KEYBOARD_SCAN_TIME      60000 //12000 us
+#define ENC_DEBOUNCE_DELAY_US   1500
+
+// KeyPadMatrix: Because column 3 was connected to TX pin, we must deactivate serial debug before use of keypad
+KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
+
+#define KEYCODE_ENCODER_BTN     132 // the encoder push button is connected to the keypad to save pins
+#define KEYCODE_POWER           68
+#define KEYCODE_MENU            36
+#define KEYCODE_MODE            20
+#define KEYCODE_LEFT            9
+#define KEYCODE_RIGHT           35
+#define KEYCODE_0               4
+#define KEYCODE_1               10
+#define KEYCODE_2               2
+#define KEYCODE_3               19
+#define KEYCODE_4               6
+#define KEYCODE_5               3
+#define KEYCODE_6               11
+#define KEYCODE_7               34
+#define KEYCODE_8               17
+#define KEYCODE_9               8
+
+// variables for encoder isr
+boolean encoderStatusA = false;
+boolean encoderStatusB = false;
 
 unsigned long WmcStartMsPulseSwitchPushButton;
 unsigned long WmcUpdateTimer3Seconds;
@@ -40,9 +67,8 @@ unsigned long WmcUpdateTimer100msec;
 unsigned long WmcUpdateTimer500msec;
 
 // buffer to hold incoming and outgoing packets
-bool turnedWhilePressed      = false;
-int16_t encoder0PosActual    = 0;
-volatile int16_t encoder0Pos = 0;
+volatile int encoderPos = 0;  // a counter for the dial
+int encoderPosOld = 1;   // change management
 
 updateEvent3sec wmcUpdateEvent3Sec;
 pushButtonsEvent wmcPushButtonEvent;
@@ -55,6 +81,106 @@ updateEvent500msec wmcUpdateEvent500msec;
 /***********************************************************************************************************************
    L O C A L   F U N C T I O N S
  **********************************************************************************************************************/
+
+/**
+ * Timer1 ISR for Keyboard scanning
+ */
+void ICACHE_RAM_ATTR isrKeypadScan(){
+	keyPadMatrix.scanKeyPad();
+    timer1_write(KEYBOARD_SCAN_TIME);//12000
+}
+
+/**
+ * Pin change ISR for Encoder pin A.
+ */
+static void isrPinChangeEncoderA() {
+	delayMicroseconds(ENC_DEBOUNCE_DELAY_US);					// a little delay for debouncing
+	if (digitalRead(PIN_ENCODER_A) != encoderStatusA ) {		// read pin for encoder A again
+		encoderStatusA = !encoderStatusA;
+		if (encoderStatusA && !encoderStatusB) encoderPos += 1;	// increments encoderPos if A leads B
+	}
+}
+
+/**
+ * Pin change ISR for Encoder pin B.
+ */
+static void isrPinChangeEncoderB() {
+	delayMicroseconds (ENC_DEBOUNCE_DELAY_US);					// a little delay for debouncing
+	if (digitalRead(PIN_ENCODER_B) != encoderStatusB) {			// read pin for encoder B again
+		encoderStatusB = !encoderStatusB;
+		if (encoderStatusB && !encoderStatusA) encoderPos -= 1;	//  decrements encoderPos if B leads A
+	}
+}
+
+/**
+ * Setup timer for Keyboard scanning
+ */
+void setupTimer() {
+	// Pause the timer while we're configuring it
+    timer1_detachInterrupt();
+
+    // Set up period
+	timer1_enable(TIM_DIV16, TIM_EDGE, TIM_SINGLE);
+	timer1_write(KEYBOARD_SCAN_TIME);
+
+    //Initialize Ticker every 0.5s
+    timer1_attachInterrupt(isrKeypadScan);
+}
+
+/**
+ * Process key press at keypad matrix
+ */
+void processKeyPadMatrix(uint8 keyCode) {
+	if (keyCode == 0)   {
+		// no key was pressed
+
+	} else if (keyCode == KEYCODE_0)   {
+        wmcPushButtonEvent.Button = button_0;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_1)   {
+		wmcPushButtonEvent.Button = button_1;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_2)  {
+		wmcPushButtonEvent.Button = button_2;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_3)  {
+		wmcPushButtonEvent.Button = button_3;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_4)   {
+		wmcPushButtonEvent.Button = button_4;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_5)   {
+		wmcPushButtonEvent.Button = button_5;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_6)  {
+	} else if (keyCode == KEYCODE_7)  {
+	} else if (keyCode == KEYCODE_8)  {
+	} else if (keyCode == KEYCODE_9)  {
+	} else if (keyCode == KEYCODE_LEFT) {
+	} else if (keyCode == KEYCODE_RIGHT) {
+	} else if (keyCode == KEYCODE_POWER)  {
+		wmcPushButtonEvent.Button = button_power;
+        send_event(wmcPushButtonEvent);
+
+	} else if (keyCode == KEYCODE_MENU) {
+        wmcPulseSwitchEvent.Status = pushedShort;			// < 300ms
+        send_event(wmcPulseSwitchEvent);
+
+	} else if (keyCode == KEYCODE_MODE) {
+        wmcPulseSwitchEvent.Status = pushedlong;			// > 3000ms
+        send_event(wmcPulseSwitchEvent);
+
+	} else if (keyCode == KEYCODE_ENCODER_BTN) {
+        wmcPulseSwitchEvent.Status = pushedNormal;			// < 1100ms
+        send_event(wmcPulseSwitchEvent);
+	}
+}
 
 /***********************************************************************************************************************
  */
@@ -136,55 +262,6 @@ static bool WmcUpdate3Sec(void)
 }
 
 /***********************************************************************************************************************
- */
-void doEncoderA()
-{
-    // look for a low-to-high on channel A
-    if (digitalRead(encoder0PinA) == HIGH)
-    {
-        // check channel B to see which way encoder is turning
-        if (digitalRead(encoder0PinB) == LOW)
-        {
-            // CW
-            encoder0Pos++;
-        }
-        else
-        {
-            // CCW
-            encoder0Pos--;
-        }
-    }
-    else // must be a high-to-low edge on channel A
-    {
-        // check channel B to see which way encoder is turning
-        if (digitalRead(encoder0PinB) == HIGH)
-        {
-            // CW
-            encoder0Pos++;
-        }
-        else
-        {
-            // CCW
-            encoder0Pos--;
-        }
-    }
-}
-
-/***********************************************************************************************************************
- */
-int8_t DecoderUpdate(void)
-{
-    int8_t Delta = 0;
-    if (encoder0Pos != encoder0PosActual)
-    {
-        Delta             = (int8_t)(encoder0Pos - encoder0PosActual);
-        encoder0PosActual = encoder0Pos;
-    }
-
-    return (Delta);
-}
-
-/***********************************************************************************************************************
    E X P O R T E D   F U N C T I O N S
  **********************************************************************************************************************/
 
@@ -196,23 +273,17 @@ int8_t DecoderUpdate(void)
  ******************************************************************************/
 void setup()
 {
-#if ENABLE_SERIAL_DEBUG == 1
-    Serial.begin(76800);
-#endif
+	#if ENABLE_SERIAL_DEBUG == 1
+		Serial.begin(76800);
+	#else
+		setupTimer();
+	#endif
 
-    /* Init the pulse / rotary encoder. */
-    pinMode(encoder0PinA, INPUT_PULLUP);
-    pinMode(encoder0PinB, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(encoder0PinA), doEncoderA, CHANGE);
-
-    /* Init debounces for switches. */
-    pinMode(D7, INPUT_PULLUP);
-    WmcPulseSwitchPushButton.interval(100);
-    WmcPulseSwitchPushButton.attach(D7);
-
-    pinMode(D0, INPUT_PULLUP);
-    WmcPowerOffOnButton.interval(100);
-    WmcPowerOffOnButton.attach(D0);
+	// initialize the rotary encoder
+	pinMode(PIN_ENCODER_A, INPUT_PULLUP);
+	pinMode(PIN_ENCODER_B, INPUT_PULLUP);
+	attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_A), isrPinChangeEncoderA, CHANGE);
+	attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_B), isrPinChangeEncoderB, CHANGE);
 
     /* Init timers. */
     WmcUpdateTimer3Seconds          = millis();
@@ -235,7 +306,11 @@ void setup()
  ******************************************************************************/
 void loop()
 {
-    int8_t Delta = 0;
+    // process keypad key press
+	if (keyPadMatrix.keyCodeHasChanged()) {
+		uint8_t keyCode = keyPadMatrix.getKeycode();
+		processKeyPadMatrix(keyCode);
+	}
 
     /* Check for timed events. */
     WmcUpdate5msec();
@@ -244,67 +319,15 @@ void loop()
     WmcUpdate500msec();
     WmcUpdate3Sec();
 
-    /* Update button status. */
-    WmcPowerOffOnButton.update();
-    WmcPulseSwitchPushButton.update();
+    // process encoder position
+    int8_t encoderDelta = 0;
+	if (encoderPos != encoderPosOld) {
+		encoderDelta = encoderPos - encoderPosOld;
+		encoderPosOld = encoderPos;
+	}
 
-    /* Check for button changes and generate evbent if required. */
-    if (WmcPowerOffOnButton.rose() == true)
-    {
-        wmcPushButtonEvent.Button = button_power;
-        send_event(wmcPushButtonEvent);
-    }
-
-    /* Pulse switch push button handling. When releasing button check time and generate event based on time.*/
-    if (WmcPulseSwitchPushButton.fell() == true)
-    {
-        WmcStartMsPulseSwitchPushButton = millis();
-    }
-    else if (WmcPulseSwitchPushButton.rose() == true)
-    {
-        if (turnedWhilePressed == false)
-        {
-            if (millis() - WmcStartMsPulseSwitchPushButton > 3000)
-            {
-                wmcPulseSwitchEvent.Status = pushedlong;
-                send_event(wmcPulseSwitchEvent);
-            }
-            else if (millis() - WmcStartMsPulseSwitchPushButton < 300)
-            {
-                wmcPulseSwitchEvent.Status = pushedShort;
-                send_event(wmcPulseSwitchEvent);
-            }
-            else if (millis() - WmcStartMsPulseSwitchPushButton < 1100)
-            {
-                wmcPulseSwitchEvent.Status = pushedNormal;
-                send_event(wmcPulseSwitchEvent);
-            }
-        }
-        else
-        {
-            turnedWhilePressed = false;
-        }
-    }
-    else if ((millis() - WmcUpdatePulseSwitch) > WMC_PULSE_SWITCH_UPDATE_TIME)
-    {
-        /* Update pulse switch turn events if turned.*/
-        WmcUpdatePulseSwitch = millis();
-        Delta                = DecoderUpdate();
-        if (Delta != 0)
-        {
-            if (WmcPulseSwitchPushButton.read() == LOW)
-            {
-                turnedWhilePressed         = true;
-                wmcPulseSwitchEvent.Status = pushturn;
-            }
-            else
-            {
-                wmcPulseSwitchEvent.Status = turn;
-            }
-
-            wmcPulseSwitchEvent.Delta = Delta;
-
-            send_event(wmcPulseSwitchEvent);
-        }
-    }
+	if (encoderDelta != 0) {
+		wmcPulseSwitchEvent.Delta = encoderDelta;
+		send_event(wmcPulseSwitchEvent);
+	}
 }
