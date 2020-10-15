@@ -20,39 +20,21 @@
  **********************************************************************************************************************/
 #define PIN_ENCODER_A           4 // D2 on WEMOS D1 Mini
 #define PIN_ENCODER_B           5 // D1 on WEMOS D1 Mini
-
-#define ENABLE_SERIAL_DEBUG     0 // Set to 1 to enable serial debug
+#define ENC_DEBOUNCE_DELAY_US   500
 
 /***********************************************************************************************************************
    D A T A   D E C L A R A T I O N S (exported, local)
  **********************************************************************************************************************/
 
-#define PIN_KEYBOARD_C0         2 // D4 on WEMOS D1 Mini
-#define PIN_KEYBOARD_C1         0 // D3 on WEMOS D1 Mini
-#define PIN_KEYBOARD_C2         3 // RX on WEMOS D1 Mini
-#define PIN_KEYBOARD_C3         1 // TX on WEMOS D1 Mini
+#if ENABLE_SERIAL_DEBUG == 0
+	KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
+#else {
+	// KeyPadMatrix: Because column 3 was connected to TX pin, we must deactivate keys on column 5 before activate Serial interface
+	KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2);
+#endif
+
 #define KEYBOARD_SCAN_TIME      60000 //12000 us
-#define ENC_DEBOUNCE_DELAY_US   1500
 
-// KeyPadMatrix: Because column 3 was connected to TX pin, we must deactivate serial debug before use of keypad
-KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
-
-#define KEYCODE_ENCODER_BTN     132 // the encoder push button is connected to the keypad to save pins
-#define KEYCODE_POWER           68
-#define KEYCODE_MENU            36
-#define KEYCODE_MODE            20
-#define KEYCODE_LEFT            9
-#define KEYCODE_RIGHT           35
-#define KEYCODE_0               4
-#define KEYCODE_1               10
-#define KEYCODE_2               2
-#define KEYCODE_3               19
-#define KEYCODE_4               6
-#define KEYCODE_5               3
-#define KEYCODE_6               11
-#define KEYCODE_7               34
-#define KEYCODE_8               17
-#define KEYCODE_9               8
 
 // variables for encoder isr
 boolean encoderStatusA = false;
@@ -83,11 +65,7 @@ updateEvent500msec wmcUpdateEvent500msec;
  **********************************************************************************************************************/
 
 /**
- * Timer1 ISR for Keyboard scanning
  */
-void ICACHE_RAM_ATTR isrKeypadScan(){
-	keyPadMatrix.scanKeyPad();
-    timer1_write(KEYBOARD_SCAN_TIME);//12000
 }
 
 /**
@@ -110,21 +88,6 @@ static void isrPinChangeEncoderB() {
 		encoderStatusB = !encoderStatusB;
 		if (encoderStatusB && !encoderStatusA) encoderPos -= 1;	//  decrements encoderPos if B leads A
 	}
-}
-
-/**
- * Setup timer for Keyboard scanning
- */
-void setupTimer() {
-	// Pause the timer while we're configuring it
-    timer1_detachInterrupt();
-
-    // Set up period
-	timer1_enable(TIM_DIV16, TIM_EDGE, TIM_SINGLE);
-	timer1_write(KEYBOARD_SCAN_TIME);
-
-    //Initialize Ticker every 0.5s
-    timer1_attachInterrupt(isrKeypadScan);
 }
 
 /**
@@ -275,8 +238,6 @@ void setup()
 {
 	#if ENABLE_SERIAL_DEBUG == 1
 		Serial.begin(76800);
-	#else
-		setupTimer();
 	#endif
 
 	// initialize the rotary encoder
@@ -306,10 +267,6 @@ void setup()
  ******************************************************************************/
 void loop()
 {
-    // process keypad key press
-	if (keyPadMatrix.keyCodeHasChanged()) {
-		uint8_t keyCode = keyPadMatrix.getKeycode();
-		processKeyPadMatrix(keyCode);
 	}
 
     /* Check for timed events. */
@@ -318,6 +275,15 @@ void loop()
     WmcUpdate100msec();
     WmcUpdate500msec();
     WmcUpdate3Sec();
+
+    // Do keypad scan
+	keyPadMatrix.scan();
+
+    // Process keypad key press
+	if (keyPadMatrix.keyCodeHasChanged()) {
+		uint8_t keyCode = keyPadMatrix.getKeycode();
+		processKeyPadMatrix(keyCode);
+	}
 
     // process encoder position
     int8_t encoderDelta = 0;
