@@ -169,15 +169,15 @@ void processKeyPadMatrix(uint8 keyCode) {
         send_event(wmcPushButtonEvent);
 
 	} else if (keyCode == KEYCODE_MENU) {
-        wmcPulseSwitchEvent.Status = pushedShort;			// < 300ms
-        send_event(wmcPulseSwitchEvent);
-
-	} else if (keyCode == KEYCODE_MODE) {
         wmcPulseSwitchEvent.Status = pushedlong;			// > 3000ms
         send_event(wmcPulseSwitchEvent);
 
-	} else if (keyCode == KEYCODE_ENCODER_BTN) {
+	} else if (keyCode == KEYCODE_MODE) {
         wmcPulseSwitchEvent.Status = pushedNormal;			// < 1100ms
+        send_event(wmcPulseSwitchEvent);
+
+	} else if (keyCode == KEYCODE_ENCODER_BTN) {
+        wmcPulseSwitchEvent.Status = pushedShort;			// < 300ms
         send_event(wmcPulseSwitchEvent);
 	}
 }
