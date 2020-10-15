@@ -22,6 +22,8 @@
 #define encoder0PinA 4 // D2 on WEMOS D1 Mini
 #define encoder0PinB 5 // D1 on WEMOS D1 Mini
 
+#define ENABLE_SERIAL_DEBUG		1	// Set to 1 to enable serial debug
+
 /***********************************************************************************************************************
    D A T A   D E C L A R A T I O N S (exported, local)
  **********************************************************************************************************************/
@@ -41,8 +43,6 @@ unsigned long WmcUpdateTimer500msec;
 bool turnedWhilePressed      = false;
 int16_t encoder0PosActual    = 0;
 volatile int16_t encoder0Pos = 0;
-
-uint8_t WmcButton;
 
 updateEvent3sec wmcUpdateEvent3Sec;
 pushButtonsEvent wmcPushButtonEvent;
@@ -196,7 +196,9 @@ int8_t DecoderUpdate(void)
  ******************************************************************************/
 void setup()
 {
-    Serial.begin(115200);
+#if ENABLE_SERIAL_DEBUG == 1
+    Serial.begin(76800);
+#endif
 
     /* Init the pulse / rotary encoder. */
     pinMode(encoder0PinA, INPUT_PULLUP);
