@@ -18,23 +18,16 @@
 /***********************************************************************************************************************
    E X P O R T E D   S Y M B O L   D E F I N I T I O N S (defines, typedefs)
  **********************************************************************************************************************/
-#define PIN_ENCODER_A           4 // D2 on WEMOS D1 Mini
-#define PIN_ENCODER_B           5 // D1 on WEMOS D1 Mini
-#define ENC_DEBOUNCE_DELAY_US   500
 
 /***********************************************************************************************************************
    D A T A   D E C L A R A T I O N S (exported, local)
  **********************************************************************************************************************/
 
-#if ENABLE_SERIAL_DEBUG == 0
-	KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
-#else {
-	// KeyPadMatrix: Because column 3 was connected to TX pin, we must deactivate keys on column 5 before activate Serial interface
-	KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2);
+KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
+
+#if ENABLE_SERIAL_DEBUG == 1
+    uint32 millisOld = millis();
 #endif
-
-#define KEYBOARD_SCAN_TIME      60000 //12000 us
-
 
 // variables for encoder isr
 boolean encoderStatusA = false;
@@ -65,84 +58,42 @@ updateEvent500msec wmcUpdateEvent500msec;
  **********************************************************************************************************************/
 
 /**
- */
-}
-
-/**
  * Pin change ISR for Encoder pin A.
  */
 static void isrPinChangeEncoderA() {
-	delayMicroseconds(ENC_DEBOUNCE_DELAY_US);					// a little delay for debouncing
-	if (digitalRead(PIN_ENCODER_A) != encoderStatusA ) {		// read pin for encoder A again
-		encoderStatusA = !encoderStatusA;
-		if (encoderStatusA && !encoderStatusB) encoderPos += 1;	// increments encoderPos if A leads B
-	}
+    delayMicroseconds(ENC_DEBOUNCE_DELAY_US);                     // a little delay for debouncing
+    if (digitalRead(PIN_ENCODER_A) != encoderStatusA ) {          // read pin for encoder A again
+        encoderStatusA = !encoderStatusA;
+        if (encoderStatusA && !encoderStatusB) encoderPos += 1;   // increments encoderPos if A leads B
+    }
 }
 
 /**
  * Pin change ISR for Encoder pin B.
  */
 static void isrPinChangeEncoderB() {
-	delayMicroseconds (ENC_DEBOUNCE_DELAY_US);					// a little delay for debouncing
-	if (digitalRead(PIN_ENCODER_B) != encoderStatusB) {			// read pin for encoder B again
-		encoderStatusB = !encoderStatusB;
-		if (encoderStatusB && !encoderStatusA) encoderPos -= 1;	//  decrements encoderPos if B leads A
-	}
+    delayMicroseconds (ENC_DEBOUNCE_DELAY_US);                    // a little delay for debouncing
+    if (digitalRead(PIN_ENCODER_B) != encoderStatusB) {           // read pin for encoder B again
+        encoderStatusB = !encoderStatusB;
+        if (encoderStatusB && !encoderStatusA) encoderPos -= 1;   //  decrements encoderPos if B leads A
+    }
 }
 
 /**
  * Process key press at keypad matrix
  */
-void processKeyPadMatrix(uint8 keyCode) {
-	if (keyCode == 0)   {
-		// no key was pressed
-
-	} else if (keyCode == KEYCODE_0)   {
-        wmcPushButtonEvent.Button = button_0;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_1)   {
-		wmcPushButtonEvent.Button = button_1;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_2)  {
-		wmcPushButtonEvent.Button = button_2;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_3)  {
-		wmcPushButtonEvent.Button = button_3;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_4)   {
-		wmcPushButtonEvent.Button = button_4;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_5)   {
-		wmcPushButtonEvent.Button = button_5;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_6)  {
-	} else if (keyCode == KEYCODE_7)  {
-	} else if (keyCode == KEYCODE_8)  {
-	} else if (keyCode == KEYCODE_9)  {
-	} else if (keyCode == KEYCODE_LEFT) {
-	} else if (keyCode == KEYCODE_RIGHT) {
-	} else if (keyCode == KEYCODE_POWER)  {
-		wmcPushButtonEvent.Button = button_power;
-        send_event(wmcPushButtonEvent);
-
-	} else if (keyCode == KEYCODE_MENU) {
-        wmcPulseSwitchEvent.Status = pushedlong;			// > 3000ms
+void processKeyPadMatrix(uint8 keyCode)
+{
+    if (keyCode == button_encoder) {
+        wmcPulseSwitchEvent.Status = pushedShort;
+        wmcPushButtonEvent.Button = button_none;
         send_event(wmcPulseSwitchEvent);
 
-	} else if (keyCode == KEYCODE_MODE) {
-        wmcPulseSwitchEvent.Status = pushedNormal;			// < 1100ms
-        send_event(wmcPulseSwitchEvent);
-
-	} else if (keyCode == KEYCODE_ENCODER_BTN) {
-        wmcPulseSwitchEvent.Status = pushedShort;			// < 300ms
-        send_event(wmcPulseSwitchEvent);
-	}
+    } else {
+        wmcPushButtonEvent.Button = (pushButtons)keyCode;
+        wmcPulseSwitchEvent.Status = turn;
+        send_event(wmcPushButtonEvent);
+    }
 }
 
 /***********************************************************************************************************************
@@ -236,15 +187,15 @@ static bool WmcUpdate3Sec(void)
  ******************************************************************************/
 void setup()
 {
-	#if ENABLE_SERIAL_DEBUG == 1
-		Serial.begin(76800);
-	#endif
+    #if ENABLE_SERIAL_DEBUG == 1
+        Serial.begin(76800);
+    #endif
 
-	// initialize the rotary encoder
-	pinMode(PIN_ENCODER_A, INPUT_PULLUP);
-	pinMode(PIN_ENCODER_B, INPUT_PULLUP);
-	attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_A), isrPinChangeEncoderA, CHANGE);
-	attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_B), isrPinChangeEncoderB, CHANGE);
+    // initialize the rotary encoder
+    pinMode(PIN_ENCODER_A, INPUT_PULLUP);
+    pinMode(PIN_ENCODER_B, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_A), isrPinChangeEncoderA, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_B), isrPinChangeEncoderB, CHANGE);
 
     /* Init timers. */
     WmcUpdateTimer3Seconds          = millis();
@@ -267,8 +218,6 @@ void setup()
  ******************************************************************************/
 void loop()
 {
-	}
-
     /* Check for timed events. */
     WmcUpdate5msec();
     WmcUpdate50msec();
@@ -276,24 +225,34 @@ void loop()
     WmcUpdate500msec();
     WmcUpdate3Sec();
 
-    // Do keypad scan
-	keyPadMatrix.scan();
+    #if ENABLE_SERIAL_DEBUG == 0
+        // Do keypad scan
+        keyPadMatrix.scan();
+    #else
+        if (millis() - millisOld > 100) {
+            Serial.end();
+            delay(10);
+            keyPadMatrix.scan();
+            Serial.begin(76800);
+            millisOld = millis();
+        }
+    #endif
 
     // Process keypad key press
-	if (keyPadMatrix.keyCodeHasChanged()) {
-		uint8_t keyCode = keyPadMatrix.getKeycode();
-		processKeyPadMatrix(keyCode);
-	}
+    if (keyPadMatrix.keyCodeHasChanged()) {
+        uint8_t keyCode = keyPadMatrix.getKeycode();
+        processKeyPadMatrix(keyCode);
+    }
 
     // process encoder position
     int8_t encoderDelta = 0;
-	if (encoderPos != encoderPosOld) {
-		encoderDelta = encoderPos - encoderPosOld;
-		encoderPosOld = encoderPos;
-	}
+    if (encoderPos != encoderPosOld) {
+        encoderDelta = encoderPos - encoderPosOld;
+        encoderPosOld = encoderPos;
+    }
 
-	if (encoderDelta != 0) {
-		wmcPulseSwitchEvent.Delta = encoderDelta;
-		send_event(wmcPulseSwitchEvent);
-	}
+    if (encoderDelta != 0) {
+        wmcPulseSwitchEvent.Delta = encoderDelta;
+        send_event(wmcPulseSwitchEvent);
+    }
 }
