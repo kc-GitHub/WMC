@@ -7,7 +7,6 @@
 /***********************************************************************************************************************
    I N C L U D E S
  **********************************************************************************************************************/
-#include <KeyPadMatrix.h>
 #include "Loclib.h"
 #include "WmcTft.h"
 #include "Z21Slave.h"
@@ -15,7 +14,6 @@
 #include "fsmlist.hpp"
 #include "wmc_event.h"
 #include <KeypadMatrix.h>
-#include <ArduinoOTA.h>
 
 /***********************************************************************************************************************
    E X P O R T E D   S Y M B O L   D E F I N I T I O N S (defines, typedefs)
@@ -246,9 +244,6 @@ void setup()
    @return     None
  ******************************************************************************/
 void loop() {
-
-    ArduinoOTA.handle();
-
     /* Check for timed events. */
     WmcUpdate5msec();
     WmcUpdate50msec();
