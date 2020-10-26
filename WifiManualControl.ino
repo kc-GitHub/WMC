@@ -14,6 +14,8 @@
 #include "app_cfg.h"
 #include "fsmlist.hpp"
 #include "wmc_event.h"
+#include <KeypadMatrix.h>
+#include <ArduinoOTA.h>
 
 /***********************************************************************************************************************
    E X P O R T E D   S Y M B O L   D E F I N I T I O N S (defines, typedefs)
@@ -23,11 +25,9 @@
    D A T A   D E C L A R A T I O N S (exported, local)
  **********************************************************************************************************************/
 
-KeyPadMatrix keyPadMatrix = KeyPadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
+KeypadMatrix keypadMatrix = KeypadMatrix(PIN_KEYBOARD_C0, PIN_KEYBOARD_C1, PIN_KEYBOARD_C2, PIN_KEYBOARD_C3);
 
-#if ENABLE_SERIAL_DEBUG == 1
-    uint32 millisOld = millis();
-#endif
+uint32 millisOld = millis();
 
 // variables for encoder isr
 boolean encoderStatusA = false;
@@ -46,6 +46,7 @@ volatile int encoderPos = 0;  // a counter for the dial
 int encoderPosOld = 1;   // change management
 
 updateEvent3sec wmcUpdateEvent3Sec;
+powerOffEvent wmcPowerOffEvent;
 pushButtonsEvent wmcPushButtonEvent;
 pulseSwitchEvent wmcPulseSwitchEvent;
 updateEvent5msec wmcUpdateEvent5msec;
@@ -82,17 +83,29 @@ static void isrPinChangeEncoderB() {
 /**
  * Process key press at keypad matrix
  */
-void processKeyPadMatrix(uint8 keyCode)
+void processKeypadMatrix(uint8 keyCode, uint8_t keyAction)
 {
-    if (keyCode == button_encoder) {
-        wmcPulseSwitchEvent.Status = pushedShort;
-        wmcPushButtonEvent.Button = button_none;
-        send_event(wmcPulseSwitchEvent);
+    wmcApp::m_WmcCommandLine.print(keyAction);
+    wmcApp::m_WmcCommandLine.print(", ");
+    wmcApp::m_WmcCommandLine.println(keyCode);
 
-    } else {
-        wmcPushButtonEvent.Button = (pushButtons)keyCode;
-        wmcPulseSwitchEvent.Status = turn;
-        send_event(wmcPushButtonEvent);
+    if (keyAction == KeypadMatrix::keyAction::released) {
+        if (keyCode == button_encoder) {
+            wmcPulseSwitchEvent.Status = pushedShort;
+            wmcPushButtonEvent.Button = button_none;
+            send_event(wmcPulseSwitchEvent);
+
+        } else {
+            wmcPushButtonEvent.Action = (pushButtonActions)keyAction;
+            wmcPushButtonEvent.Button = (pushButtons)keyCode;
+            wmcPulseSwitchEvent.Status = turn;
+            send_event(wmcPushButtonEvent);
+        }
+
+    } else if (keyAction == KeypadMatrix::keyAction::pressedLong) {
+        if (keyCode == button_power) {
+            send_event(wmcPowerOffEvent);
+        }
     }
 }
 
@@ -187,6 +200,19 @@ static bool WmcUpdate3Sec(void)
  ******************************************************************************/
 void setup()
 {
+    // set long key press timeout
+    keypadMatrix.setLongKeyPressTimeout(2000);
+
+    #if PIN_LCD_BACKLIGHT > 0
+        // setup Backlight pins
+        #if PIN_LCD_BACKLIGHT == 15
+            // pin 15 at ESP8266 is configured as HW_SPI CS-Pin we reconfigure this pin here
+            PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
+        #endif
+        pinMode(PIN_LCD_BACKLIGHT, OUTPUT);
+        digitalWrite(PIN_LCD_BACKLIGHT, LOW);     // Disable backlight here to prevent LCD flickering at power on
+    #endif
+
     #if ENABLE_SERIAL_DEBUG == 1
         Serial.begin(76800);
     #endif
@@ -208,6 +234,14 @@ void setup()
 
     /* Kick the state machine. */
     fsm_list::start();
+
+    pinMode(PIN_POWER_ENABLE, OUTPUT);
+    digitalWrite(PIN_POWER_ENABLE, LOW);
+
+    // switch TFT display backlight on
+    #if PIN_LCD_BACKLIGHT > 0
+        analogWrite(PIN_LCD_BACKLIGHT, 1024);
+    #endif
 }
 
 /**
@@ -216,8 +250,10 @@ void setup()
    @param
    @return     None
  ******************************************************************************/
-void loop()
-{
+void loop() {
+
+    ArduinoOTA.handle();
+
     /* Check for timed events. */
     WmcUpdate5msec();
     WmcUpdate50msec();
@@ -227,21 +263,23 @@ void loop()
 
     #if ENABLE_SERIAL_DEBUG == 0
         // Do keypad scan
-        keyPadMatrix.scan();
+        keypadMatrix.scan();
     #else
-        if (millis() - millisOld > 100) {
+        if (millis() - millisOld > 10) {
             Serial.end();
             delay(10);
-            keyPadMatrix.scan();
+            keypadMatrix.scan();
             Serial.begin(76800);
             millisOld = millis();
         }
     #endif
 
     // Process keypad key press
-    if (keyPadMatrix.keyCodeHasChanged()) {
-        uint8_t keyCode = keyPadMatrix.getKeycode();
-        processKeyPadMatrix(keyCode);
+    if (millis() - millisOld > 100) {
+        if (keypadMatrix.hasEvent()) {
+            processKeypadMatrix(keypadMatrix.getKeycode(), keypadMatrix.getAction());
+        }
+        millisOld = millis();
     }
 
     // process encoder position
