@@ -83,12 +83,8 @@ static void isrPinChangeEncoderB() {
 /**
  * Process key press at keypad matrix
  */
-void processKeypadMatrix(uint8 keyCode, uint8_t keyAction)
+void processKeypadMatrix(uint8 keyCode, KeypadMatrix::keyAction keyAction)
 {
-    wmcApp::m_WmcCommandLine.print(keyAction);
-    wmcApp::m_WmcCommandLine.print(", ");
-    wmcApp::m_WmcCommandLine.println(keyCode);
-
     if (keyAction == KeypadMatrix::keyAction::released) {
         if (keyCode == button_encoder) {
             wmcPulseSwitchEvent.Status = pushedShort;
@@ -96,7 +92,6 @@ void processKeypadMatrix(uint8 keyCode, uint8_t keyAction)
             send_event(wmcPulseSwitchEvent);
 
         } else {
-            wmcPushButtonEvent.Action = (pushButtonActions)keyAction;
             wmcPushButtonEvent.Button = (pushButtons)keyCode;
             wmcPulseSwitchEvent.Status = turn;
             send_event(wmcPushButtonEvent);
