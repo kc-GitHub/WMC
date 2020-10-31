@@ -51,6 +51,8 @@ updateEvent5msec wmcUpdateEvent5msec;
 updateEvent50msec wmcUpdateEvent50msec;
 updateEvent100msec wmcUpdateEvent100msec;
 updateEvent500msec wmcUpdateEvent500msec;
+updateEvent100msecDefault wmcUpdateEvent100msecDefault;
+updateEvent3secDefault wmcUpdateEvent3secDefault;
 
 /***********************************************************************************************************************
    L O C A L   F U N C T I O N S
@@ -145,6 +147,9 @@ static bool WmcUpdate100msec(void)
         Result                = true;
         WmcUpdateTimer100msec = millis();
         send_event(wmcUpdateEvent100msec);
+
+        // this event must fired at all states
+        send_event(wmcUpdateEvent100msecDefault);
     }
 
     return (Result);
@@ -176,6 +181,9 @@ static bool WmcUpdate3Sec(void)
         Result                 = true;
         WmcUpdateTimer3Seconds = millis();
         send_event(wmcUpdateEvent3Sec);
+
+        // this event must fired at all states
+        send_event(wmcUpdateEvent3secDefault);
     }
 
     return (Result);
